@@ -14,7 +14,7 @@ def main():
     cap = cv2.VideoCapture(args.cam)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  args.w)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.h)
-    cap.setcv2.CAP_PROP_FPS, args.fps) if hasattr(cv2, "CAP_PROP_FPS") else None
+    cap.set(cv2.CAP_PROP_FPS, args.fps) if hasattr(cv2, "CAP_PROP_FPS") else None
 
     ctx = zmq.Context.instance()
     pub = ctx.socket(zmq.PUB)

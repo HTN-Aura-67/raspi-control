@@ -1,2 +1,12 @@
-websockets
-pillow
+# Hardware Interaction Requirements
+adafruit-circuitpython-vl53l0x
+luma.led-matrix
+RPi.GPIO
+
+# Web Framework Requirements
+flask
+flask-cors
+
+# API Testing Requirements
+requests==2.31.0
+unittest2==1.1.0  # For older Python versions if needed

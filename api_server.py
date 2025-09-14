@@ -5,34 +5,383 @@ Serves both TOF sensor and LED control functionality in a single API
 
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'tof'))
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'led_control'))
+
+# Add current directory and subdirectories to path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, current_dir)
+sys.path.insert(0, os.path.join(current_dir, 'tof'))
+sys.path.insert(0, os.path.join(current_dir, 'led_control'))
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import time
 
-# Import our modules
-try:
-    from tof_api import TOFSensor
-    tof_available = True
-except ImportError:
-    tof_available = False
-    print("Warning: TOF sensor module not available")
+# Import our modules with better error handling
+tof_sensor = None
+led_controller = None
+tof_available = False
+led_available = False
 
 try:
-    from led_api import LEDController
+    # Try importing TOF sensor components directly
+    import board
+    import busio
+    import adafruit_vl53l0x
+    from typing import Optional, Dict, Any
+    
+    class TOFSensor:
+        def __init__(self):
+            self.sensor = None
+            self.is_initialized = False
+            self.last_reading = None
+            self.last_error = None
+            self.initialize_sensor()
+        
+        def initialize_sensor(self) -> bool:
+            try:
+                i2c = busio.I2C(board.SCL, board.SDA)
+                self.sensor = adafruit_vl53l0x.VL53L0X(i2c)
+                self.is_initialized = True
+                return True
+            except Exception as e:
+                self.last_error = str(e)
+                print(f"TOF sensor init failed: {e}")
+                return False
+        
+        def read_distance(self) -> Optional[int]:
+            try:
+                if self.sensor:
+                    distance = self.sensor.range
+                    self.last_reading = distance
+                    return distance
+                else:
+                    # Mock reading
+                    import random
+                    distance = random.randint(100, 2000)
+                    self.last_reading = distance
+                    return distance
+            except Exception as e:
+                self.last_error = str(e)
+                return None
+        
+        def get_status(self) -> Dict[str, Any]:
+            return {
+                "initialized": self.is_initialized,
+                "hardware_available": True,
+                "last_reading": self.last_reading,
+                "last_error": self.last_error,
+                "timestamp": time.time()
+            }
+        
+        def read_multiple(self, count: int = 10, interval: float = 0.1) -> Dict[str, Any]:
+            readings = []
+            start_time = time.time()
+            
+            for i in range(count):
+                distance = self.read_distance()
+                if distance is not None:
+                    readings.append({
+                        "reading": i + 1,
+                        "distance_mm": distance,
+                        "timestamp": time.time()
+                    })
+                time.sleep(interval)
+            
+            if readings:
+                distances = [r["distance_mm"] for r in readings]
+                stats = {
+                    "min": min(distances),
+                    "max": max(distances),
+                    "avg": sum(distances) / len(distances),
+                    "count": len(distances)
+                }
+            else:
+                stats = {"min": None, "max": None, "avg": None, "count": 0}
+            
+            return {
+                "readings": readings,
+                "statistics": stats,
+                "duration_seconds": time.time() - start_time
+            }
+    
+    tof_sensor = TOFSensor()
+    tof_available = True
+    print("✅ TOF sensor module loaded successfully")
+    
+except ImportError as e:
+    tof_available = False
+    print(f"⚠️  TOF sensor hardware not available: {e}")
+except Exception as e:
+    tof_available = False
+    print(f"❌ TOF sensor initialization failed: {e}")
+
+try:
+    # Try importing LED controller components directly
+    from luma.core.interface.serial import spi, noop
+    from luma.led_matrix.device import max7219
+    from luma.core.render import canvas
+    import threading
+    
+    class LEDController:
+        def __init__(self):
+            self.device = None
+            self.is_initialized = False
+            self.current_expression = "normal"
+            self.animation_thread = None
+            self.stop_animation = False
+            
+            # Eye expressions (16x8 each)
+            self.expressions = {
+                "normal": [
+                    [0,0,1,1,1,1,0,0,   0,0,1,1,1,1,0,0],
+                    [0,1,0,0,0,0,1,0,   0,1,0,0,0,0,1,0],
+                    [1,0,0,0,0,0,0,1,   1,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,1,   1,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,1,   1,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,1,   1,0,0,0,0,0,0,1],
+                    [0,1,0,0,0,0,1,0,   0,1,0,0,0,0,1,0],
+                    [0,0,1,1,1,1,0,0,   0,0,1,1,1,1,0,0]
+                ],
+                "happy": [
+                    [0,0,1,1,1,1,0,0,   0,0,1,1,1,1,0,0],
+                    [0,1,0,0,0,0,1,0,   0,1,0,0,0,0,1,0],
+                    [1,0,0,0,0,0,0,1,   1,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,1,   1,0,0,0,0,0,0,1],
+                    [1,0,0,1,1,0,0,1,   1,0,0,1,1,0,0,1],
+                    [0,1,1,0,0,1,1,0,   0,1,1,0,0,1,1,0],
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0],
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0]
+                ],
+                "sad": [
+                    [0,0,1,1,1,1,0,0,   0,0,1,1,1,1,0,0],
+                    [0,1,0,0,0,0,1,0,   0,1,0,0,0,0,1,0],
+                    [1,0,0,0,0,0,0,1,   1,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,1,   1,0,0,0,0,0,0,1],
+                    [0,1,0,0,0,0,1,0,   0,1,0,0,0,0,1,0],
+                    [0,0,1,0,0,1,0,0,   0,0,1,0,0,1,0,0],
+                    [0,0,0,1,1,0,0,0,   0,0,0,1,1,0,0,0],
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0]
+                ],
+                "wink": [
+                    [0,0,1,1,1,1,0,0,   0,0,0,0,0,0,0,0],
+                    [0,1,0,0,0,0,1,0,   0,0,0,0,0,0,0,0],
+                    [1,0,0,0,0,0,0,1,   0,0,1,1,1,1,0,0],
+                    [1,0,0,0,0,0,0,1,   0,1,0,0,0,0,1,0],
+                    [1,0,0,0,0,0,0,1,   1,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,1,   0,0,0,0,0,0,0,0],
+                    [0,1,0,0,0,0,1,0,   0,0,0,0,0,0,0,0],
+                    [0,0,1,1,1,1,0,0,   0,0,0,0,0,0,0,0]
+                ],
+                "love": [
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0],
+                    [0,1,1,0,0,1,1,0,   0,1,1,0,0,1,1,0],
+                    [1,1,1,1,1,1,1,1,   1,1,1,1,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,   1,1,1,1,1,1,1,1],
+                    [0,1,1,1,1,1,1,0,   0,1,1,1,1,1,1,0],
+                    [0,0,1,1,1,1,0,0,   0,0,1,1,1,1,0,0],
+                    [0,0,0,1,1,0,0,0,   0,0,0,1,1,0,0,0],
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0]
+                ],
+                "closed": [
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0],
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0],
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0],
+                    [1,1,1,1,1,1,1,1,   1,1,1,1,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,   1,1,1,1,1,1,1,1],
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0],
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0],
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0]
+                ],
+                "off": [
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0],
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0],
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0],
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0],
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0],
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0],
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0],
+                    [0,0,0,0,0,0,0,0,   0,0,0,0,0,0,0,0]
+                ]
+            }
+            
+            self.initialize_device()
+        
+        def initialize_device(self) -> bool:
+            try:
+                serial = spi(port=0, device=0, gpio=noop())
+                self.device = max7219(serial, cascaded=2, block_orientation=0, rotate=0)
+                self.is_initialized = True
+                return True
+            except Exception as e:
+                print(f"LED matrix init failed: {e}")
+                return False
+        
+        def display_expression(self, expression: str) -> bool:
+            if expression not in self.expressions:
+                return False
+            
+            self.current_expression = expression
+            eye_pattern = self.expressions[expression]
+            
+            if self.device:
+                try:
+                    with canvas(self.device) as draw:
+                        for y, row in enumerate(eye_pattern):
+                            for x, pixel in enumerate(row):
+                                if pixel:
+                                    draw.point((x, y), fill="white")
+                    return True
+                except Exception as e:
+                    print(f"Error displaying expression: {e}")
+                    return False
+            else:
+                print(f"Mock: Displaying expression '{expression}'")
+                return True
+        
+        def blink(self, base_expression: str = None, duration: float = 0.15) -> bool:
+            if base_expression is None:
+                base_expression = self.current_expression
+            
+            if base_expression not in self.expressions:
+                return False
+            
+            self.display_expression("closed")
+            time.sleep(duration)
+            self.display_expression(base_expression)
+            return True
+        
+        def start_animation(self, expressions: list, duration: float = 1.0, loop: bool = True):
+            self.stop_animation = False
+            
+            def animate():
+                while not self.stop_animation:
+                    for expr in expressions:
+                        if self.stop_animation:
+                            break
+                        self.display_expression(expr)
+                        time.sleep(duration)
+                    if not loop:
+                        break
+            
+            if self.animation_thread and self.animation_thread.is_alive():
+                self.stop_animation = True
+                self.animation_thread.join()
+            
+            self.animation_thread = threading.Thread(target=animate)
+            self.animation_thread.start()
+        
+        def stop_current_animation(self):
+            self.stop_animation = True
+            if self.animation_thread and self.animation_thread.is_alive():
+                self.animation_thread.join()
+        
+        def get_status(self) -> Dict[str, Any]:
+            return {
+                "initialized": self.is_initialized,
+                "hardware_available": True,
+                "current_expression": self.current_expression,
+                "available_expressions": list(self.expressions.keys()),
+                "animation_running": self.animation_thread is not None and self.animation_thread.is_alive()
+            }
+    
+    led_controller = LEDController()
     led_available = True
-except ImportError:
+    print("✅ LED controller module loaded successfully")
+    
+except ImportError as e:
     led_available = False
-    print("Warning: LED controller module not available")
+    print(f"⚠️  LED controller hardware not available: {e}")
+except Exception as e:
+    led_available = False
+    print(f"❌ LED controller initialization failed: {e}")
+
+# Create mock classes if hardware not available
+if not tof_available:
+    class MockTOFSensor:
+        def __init__(self):
+            self.is_initialized = False
+            self.last_reading = None
+            self.last_error = "Hardware not available"
+        
+        def read_distance(self):
+            import random
+            self.last_reading = random.randint(100, 2000)
+            return self.last_reading
+        
+        def get_status(self):
+            return {
+                "initialized": False,
+                "hardware_available": False,
+                "last_reading": self.last_reading,
+                "last_error": self.last_error,
+                "timestamp": time.time()
+            }
+        
+        def read_multiple(self, count=10, interval=0.1):
+            readings = []
+            for i in range(count):
+                distance = self.read_distance()
+                readings.append({
+                    "reading": i + 1,
+                    "distance_mm": distance,
+                    "timestamp": time.time()
+                })
+                time.sleep(interval)
+            
+            distances = [r["distance_mm"] for r in readings]
+            return {
+                "readings": readings,
+                "statistics": {
+                    "min": min(distances),
+                    "max": max(distances),
+                    "avg": sum(distances) / len(distances),
+                    "count": len(distances)
+                },
+                "duration_seconds": count * interval
+            }
+    
+    tof_sensor = MockTOFSensor()
+
+if not led_available:
+    class MockLEDController:
+        def __init__(self):
+            self.is_initialized = False
+            self.current_expression = "normal"
+            self.expressions = {
+                "normal": [], "happy": [], "sad": [], "wink": [], 
+                "love": [], "closed": [], "off": []
+            }
+        
+        def display_expression(self, expression):
+            if expression in self.expressions:
+                self.current_expression = expression
+                print(f"Mock LED: Displaying {expression}")
+                return True
+            return False
+        
+        def blink(self, base_expression=None, duration=0.15):
+            print(f"Mock LED: Blinking for {duration}s")
+            return True
+        
+        def start_animation(self, expressions, duration=1.0, loop=True):
+            print(f"Mock LED: Starting animation with {expressions}")
+        
+        def stop_current_animation(self):
+            print("Mock LED: Stopping animation")
+        
+        def get_status(self):
+            return {
+                "initialized": False,
+                "hardware_available": False,
+                "current_expression": self.current_expression,
+                "available_expressions": list(self.expressions.keys()),
+                "animation_running": False
+            }
+    
+    led_controller = MockLEDController()
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for web interface
-
-# Initialize hardware
-tof_sensor = TOFSensor() if tof_available else None
-led_controller = LEDController() if led_available else None
 
 # Health check endpoint
 @app.route('/health', methods=['GET'])

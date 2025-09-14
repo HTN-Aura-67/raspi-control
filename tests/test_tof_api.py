@@ -14,7 +14,7 @@ class TestTOFSensorAPI(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        self.base_url = "http://localhost:5001"
+        self.base_url = "http://localhost:5000"
         self.timeout = 5
     
     def test_distance_reading(self):
@@ -38,7 +38,7 @@ class TestTOFSensorAPI(unittest.TestCase):
             print(f"✅ Distance reading: {distance}mm")
             
         except requests.exceptions.ConnectionError:
-            self.skipTest("TOF API server not running on port 5001")
+            self.skipTest("Combined API server not running on port 5000")
     
     def test_multiple_readings(self):
         """Test multiple distance readings"""
@@ -75,7 +75,7 @@ class TestTOFSensorAPI(unittest.TestCase):
             print(f"   Stats: min={stats['min']}mm, max={stats['max']}mm, avg={stats['avg']:.1f}mm")
             
         except requests.exceptions.ConnectionError:
-            self.skipTest("TOF API server not running on port 5001")
+            self.skipTest("Combined API server not running on port 5000")
     
     def test_sensor_status(self):
         """Test sensor status endpoint"""
@@ -94,7 +94,7 @@ class TestTOFSensorAPI(unittest.TestCase):
             print(f"   Hardware available: {data['hardware_available']}")
             
         except requests.exceptions.ConnectionError:
-            self.skipTest("TOF API server not running on port 5001")
+            self.skipTest("Combined API server not running on port 5000")
     
     def test_sensor_initialization(self):
         """Test sensor re-initialization"""
@@ -111,7 +111,7 @@ class TestTOFSensorAPI(unittest.TestCase):
             print(f"✅ Initialization result: {data['message']}")
             
         except requests.exceptions.ConnectionError:
-            self.skipTest("TOF API server not running on port 5001")
+            self.skipTest("Combined API server not running on port 5000")
     
     def test_invalid_parameters(self):
         """Test API with invalid parameters"""
@@ -131,7 +131,7 @@ class TestTOFSensorAPI(unittest.TestCase):
             print("✅ Parameter validation working")
             
         except requests.exceptions.ConnectionError:
-            self.skipTest("TOF API server not running on port 5001")
+            self.skipTest("Combined API server not running on port 5000")
 
 def run_tof_tests():
     """Run all TOF sensor tests"""

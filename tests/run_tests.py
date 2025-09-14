@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
 Hardware API Test Runner
-Comprehensive testing suite for all hardware APIs
+Comprehensive testing suite for the consolidated hardware API
 
 This script runs tests for:
-- TOF Sensor API (port 5001)
-- LED Control API (port 5002)  
-- Combined API Server (port 5000)
+- TOF Sensor API endpoints (on combined server port 5000)
+- LED Control API endpoints (on combined server port 5000)  
+- Combined API Server functionality
 - Integration tests
 
 Usage:
@@ -39,8 +39,6 @@ class TestRunner:
     def __init__(self):
         self.results = {}
         self.servers = {
-            "tof": {"port": 5001, "process": None},
-            "led": {"port": 5002, "process": None},
             "combined": {"port": 5000, "process": None}
         }
     
@@ -53,8 +51,6 @@ class TestRunner:
             try:
                 # Try alternative endpoints
                 endpoints = {
-                    "tof": "/tof/status",
-                    "led": "/led/status", 
                     "combined": "/status"
                 }
                 endpoint = endpoints.get(name, "/health")
@@ -80,8 +76,6 @@ class TestRunner:
     def start_server(self, server_type: str) -> bool:
         """Start a server process"""
         server_files = {
-            "tof": "tof/tof_api.py",
-            "led": "led_control/led_api.py",
             "combined": "api_server.py"
         }
         
@@ -124,25 +118,25 @@ class TestRunner:
         print("🧪 RUNNING INDIVIDUAL API TESTS")
         print("="*60)
         
-        # Test TOF API
-        print("\n1️⃣  TOF Sensor API Tests")
+        # Test TOF API endpoints on combined server
+        print("\n1️⃣  TOF Sensor API Tests (via Combined API)")
         print("-" * 30)
         tof_success = False
-        if self.check_server("tof", 5001):
+        if self.check_server("combined", 5000):
             tof_success = run_tof_tests()
         else:
-            print("⚠️  TOF API server not running on port 5001")
-            print("   Run: python tof/tof_api.py")
+            print("⚠️  Combined API server not running on port 5000")
+            print("   Run: python api_server.py")
         
-        # Test LED API
-        print("\n2️⃣  LED Control API Tests")
+        # Test LED API endpoints on combined server
+        print("\n2️⃣  LED Control API Tests (via Combined API)")
         print("-" * 30)
         led_success = False
-        if self.check_server("led", 5002):
+        if self.check_server("combined", 5000):
             led_success = run_led_tests()
         else:
-            print("⚠️  LED API server not running on port 5002")
-            print("   Run: python led_control/led_api.py")
+            print("⚠️  Combined API server not running on port 5000")
+            print("   Run: python api_server.py")
         
         return tof_success, led_success, True
     
@@ -269,10 +263,6 @@ class TestRunner:
         print("\n💡 Recommendations:")
         if not self.check_server("combined", 5000):
             print("   • Start combined API server: python api_server.py")
-        if not self.check_server("tof", 5001):
-            print("   • Start TOF API server: python tof/tof_api.py")
-        if not self.check_server("led", 5002):
-            print("   • Start LED API server: python led_control/led_api.py")
         
         print("   • Install requirements: pip install -r requirements_api.txt")
         print("   • Check hardware connections on Raspberry Pi")

@@ -14,7 +14,7 @@ class TestLEDControlAPI(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        self.base_url = "http://localhost:5002"
+        self.base_url = "http://localhost:5000"
         self.timeout = 5
         self.valid_expressions = [
             "normal", "happy", "sad", "wink", "love", "closed", "off"
@@ -44,7 +44,7 @@ class TestLEDControlAPI(unittest.TestCase):
             print(f"   Current: {data['current']}")
             
         except requests.exceptions.ConnectionError:
-            self.skipTest("LED API server not running on port 5002")
+            self.skipTest("Combined API server not running on port 5000")
     
     def test_set_expression_json(self):
         """Test setting expression via JSON payload"""
@@ -66,7 +66,7 @@ class TestLEDControlAPI(unittest.TestCase):
                 time.sleep(0.5)  # Brief pause between expressions
                 
         except requests.exceptions.ConnectionError:
-            self.skipTest("LED API server not running on port 5002")
+            self.skipTest("Combined API server not running on port 5000")
     
     def test_set_expression_path(self):
         """Test setting expression via URL path"""
@@ -86,7 +86,7 @@ class TestLEDControlAPI(unittest.TestCase):
                 time.sleep(0.5)
                 
         except requests.exceptions.ConnectionError:
-            self.skipTest("LED API server not running on port 5002")
+            self.skipTest("Combined API server not running on port 5000")
     
     def test_blink_animation(self):
         """Test blink animation"""
@@ -116,7 +116,7 @@ class TestLEDControlAPI(unittest.TestCase):
             print("✅ Custom blink successful")
             
         except requests.exceptions.ConnectionError:
-            self.skipTest("LED API server not running on port 5002")
+            self.skipTest("Combined API server not running on port 5000")
     
     def test_animation_sequence(self):
         """Test animation sequence"""
@@ -154,7 +154,7 @@ class TestLEDControlAPI(unittest.TestCase):
             print("✅ Animation stopped")
             
         except requests.exceptions.ConnectionError:
-            self.skipTest("LED API server not running on port 5002")
+            self.skipTest("Combined API server not running on port 5000")
     
     def test_led_status(self):
         """Test LED controller status"""
@@ -177,7 +177,7 @@ class TestLEDControlAPI(unittest.TestCase):
             print(f"   Animation running: {data['animation_running']}")
             
         except requests.exceptions.ConnectionError:
-            self.skipTest("LED API server not running on port 5002")
+            self.skipTest("Combined API server not running on port 5000")
     
     def test_invalid_expression(self):
         """Test invalid expression handling"""
@@ -197,7 +197,7 @@ class TestLEDControlAPI(unittest.TestCase):
             print("✅ Invalid expression properly rejected")
             
         except requests.exceptions.ConnectionError:
-            self.skipTest("LED API server not running on port 5002")
+            self.skipTest("Combined API server not running on port 5000")
     
     def test_expression_cycle(self):
         """Test cycling through all expressions"""
@@ -224,7 +224,7 @@ class TestLEDControlAPI(unittest.TestCase):
             print(f"✅ Successfully cycled through {len(expressions[:4])} expressions")
             
         except requests.exceptions.ConnectionError:
-            self.skipTest("LED API server not running on port 5002")
+            self.skipTest("Combined API server not running on port 5000")
 
 def run_led_tests():
     """Run all LED control tests"""

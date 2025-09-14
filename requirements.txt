@@ -1,6 +1,7 @@
 # Hardware Interaction Requirements
 adafruit-circuitpython-vl53l0x
 luma.led-matrix
+spidev
 RPi.GPIO
 
 # Web Framework Requirements

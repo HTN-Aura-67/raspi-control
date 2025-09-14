@@ -211,9 +211,13 @@ try:
                 serial = spi(port=0, device=0, gpio=noop())
                 self.device = max7219(serial, cascaded=2, block_orientation=0, rotate=0)
                 self.is_initialized = True
+                print("✅ LED matrix hardware initialized successfully")
                 return True
             except Exception as e:
-                print(f"LED matrix init failed: {e}")
+                print(f"⚠️ LED matrix hardware init failed: {e}")
+                print("   Falling back to mock mode for LED controller")
+                self.is_initialized = False
+                self.device = None
                 return False
         
         def display_expression(self, expression: str) -> bool:
@@ -223,7 +227,7 @@ try:
             self.current_expression = expression
             eye_pattern = self.expressions[expression]
             
-            if self.device:
+            if self.device and self.is_initialized:
                 try:
                     with canvas(self.device) as draw:
                         for y, row in enumerate(eye_pattern):
@@ -235,7 +239,7 @@ try:
                     print(f"Error displaying expression: {e}")
                     return False
             else:
-                print(f"Mock: Displaying expression '{expression}'")
+                print(f"🎭 Mock LED: Displaying expression '{expression}'")
                 return True
         
         def blink(self, base_expression: str = None, duration: float = 0.15) -> bool:
@@ -245,6 +249,7 @@ try:
             if base_expression not in self.expressions:
                 return False
             
+            print(f"👀 LED Blink: {base_expression} -> closed -> {base_expression} (duration: {duration}s)")
             self.display_expression("closed")
             time.sleep(duration)
             self.display_expression(base_expression)
@@ -278,7 +283,7 @@ try:
         def get_status(self) -> Dict[str, Any]:
             return {
                 "initialized": self.is_initialized,
-                "hardware_available": True,
+                "hardware_available": self.device is not None,
                 "current_expression": self.current_expression,
                 "available_expressions": list(self.expressions.keys()),
                 "animation_running": self.animation_thread is not None and self.animation_thread.is_alive()
@@ -286,8 +291,11 @@ try:
     
     led_controller = LEDController()
     led_available = True
-    print("✅ LED controller module loaded successfully")
-    
+    if led_controller.is_initialized:
+        print("✅ LED controller with hardware initialized successfully")
+    else:
+        print("⚠️ LED controller running in mock mode (no hardware)")
+
 except ImportError as e:
     led_available = False
     print(f"⚠️  LED controller hardware not available: {e}")
